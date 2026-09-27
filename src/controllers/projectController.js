@@ -1,7 +1,7 @@
-const Project = require("../models/projectModel");
+const projectService = require("../services/projectService");
 
 const getProjects = async (req, res) => {
-  const projects = await Project.find().sort({ createdAt: -1 });
+  const projects = await projectService.getAllProjects();
 
   res.json({
     data: projects,
@@ -11,14 +11,14 @@ const getProjects = async (req, res) => {
 const createProject = async (req, res) => {
   const { projectName, description = "", status = "pending" } = req.body;
 
-  if (!projectName) {
+  if (!projectName || !projectName.trim()) {
     return res.status(400).json({
       message: "projectName is required",
     });
   }
 
-  const project = await Project.create({
-    projectName,
+  const project = await projectService.createProject({
+    projectName: projectName.trim(),
     description,
     status,
   });

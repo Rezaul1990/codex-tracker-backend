@@ -4,6 +4,7 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
+    "seed:admin": "node src/scripts/seedAdmin.js",
     "start": "node src/server.js"
   },
   "keywords": [],
@@ -11,10 +12,15 @@
   "license": "ISC",
   "description": "Basic Node.js API for Codex Tracker System",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^18.0.3",
     "express": "^5.2.1",
-    "mongoose": "^8.24.4"
+    "express-rate-limit": "^8.7.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.24.4",
+    "nodemailer": "^10.0.11"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
