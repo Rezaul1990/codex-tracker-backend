@@ -58,7 +58,25 @@ const createAuthSession = async (user, userAgent = "") => {
   };
 };
 
-const inviteUser = async ({ invitedBy, name, email, role }) => {
+const getAllowedInviteRoles = (inviterRole) => {
+  if (inviterRole === "admin") {
+    return ["manager", "member"];
+  }
+
+  if (inviterRole === "manager") {
+    return ["member"];
+  }
+
+  return [];
+};
+
+const inviteUser = async ({ invitedBy, inviterRole, name, email, role }) => {
+  const allowedRoles = getAllowedInviteRoles(inviterRole);
+
+  if (!allowedRoles.includes(role)) {
+    throw new ApiError(403, "You cannot invite a user with this role", "FORBIDDEN");
+  }
+
   const existingUser = await User.findOne({ email });
 
   if (existingUser) {
@@ -86,7 +104,10 @@ const inviteUser = async ({ invitedBy, name, email, role }) => {
     id: invitation._id.toString(),
     email: invitation.email,
     expiresAt: invitation.expiresAt,
+    inviteUrl: buildUrl("/auth/invite", token),
+    name: invitation.name,
     role: invitation.role,
+    token,
   };
 };
 
@@ -108,6 +129,7 @@ const acceptInvitation = async ({ name, password, token }) => {
   }
 
   const user = await User.create({
+    emailVerifiedAt: new Date(),
     email: invitation.email,
     name: name || invitation.name,
     passwordHash: await hashPassword(password),
@@ -116,13 +138,6 @@ const acceptInvitation = async ({ name, password, token }) => {
 
   invitation.acceptedAt = new Date();
   await invitation.save();
-
-  const verificationToken = await createVerificationToken(user);
-
-  await emailService.sendVerificationEmail({
-    email: user.email,
-    verifyUrl: buildUrl("/auth/verify-email", verificationToken),
-  });
 
   return user.toSafeObject();
 };

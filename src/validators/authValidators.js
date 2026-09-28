@@ -21,10 +21,13 @@ const assertRequiredString = (value, field) => {
 
 const invitationRequestValidator = (body) => {
   const email = normalizeEmail(body.email);
+  const name = String(body.name || "").trim();
 
   if (!validateEmail(email)) {
     throw new ApiError(400, "A valid email is required", "VALIDATION_ERROR");
   }
+
+  assertRequiredString(name, "name");
 
   if (!USER_ROLES.includes(body.role)) {
     throw new ApiError(400, "A valid role is required", "VALIDATION_ERROR");
@@ -32,14 +35,13 @@ const invitationRequestValidator = (body) => {
 
   return {
     email,
-    name: String(body.name || "").trim(),
+    name,
     role: body.role,
   };
 };
 
 const acceptInvitationValidator = (body) => {
   assertRequiredString(body.token, "token");
-  assertRequiredString(body.name, "name");
 
   if (!validatePassword(body.password)) {
     throw new ApiError(
@@ -50,7 +52,6 @@ const acceptInvitationValidator = (body) => {
   }
 
   return {
-    name: body.name.trim(),
     password: body.password,
     token: body.token.trim(),
   };

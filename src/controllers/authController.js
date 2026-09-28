@@ -7,11 +7,12 @@ const inviteUser = asyncHandler(async (req, res) => {
   const invitation = await authService.inviteUser({
     ...req.validatedBody,
     invitedBy: req.user.id,
+    inviterRole: req.user.role,
   });
 
   res.status(201).json({
     data: invitation,
-    message: "Invitation sent",
+    message: "Invitation created",
   });
 });
 
@@ -20,7 +21,7 @@ const acceptInvitation = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     data: user,
-    message: "Invitation accepted. Please verify your email before logging in.",
+    message: "Account created. You can log in now.",
   });
 });
 

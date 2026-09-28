@@ -1,11 +1,16 @@
-const defaultOrigins = ["http://localhost:3000", "http://localhost:3001"];
+const defaultOrigins = ["http://localhost:3000", "http://localhost:3001", "http://localhost:5001"];
 
 const configuredOrigins = (process.env.CLIENT_URL || "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-const allowedOrigins = configuredOrigins.length > 0 ? configuredOrigins : defaultOrigins;
+const allowedOrigins = Array.from(
+  new Set([
+    ...(configuredOrigins.length > 0 ? configuredOrigins : defaultOrigins),
+    process.env.API_URL,
+  ].filter(Boolean)),
+);
 
 const corsOptions = {
   credentials: true,

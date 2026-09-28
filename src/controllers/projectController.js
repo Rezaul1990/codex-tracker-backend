@@ -1,14 +1,15 @@
 const projectService = require("../services/projectService");
+const asyncHandler = require("../utils/asyncHandler");
 
-const getProjects = async (req, res) => {
+const getProjects = asyncHandler(async (req, res) => {
   const projects = await projectService.getAllProjects();
 
   res.json({
     data: projects,
   });
-};
+});
 
-const createProject = async (req, res) => {
+const createProject = asyncHandler(async (req, res) => {
   const { projectName, description = "", status = "pending" } = req.body;
 
   if (!projectName || !projectName.trim()) {
@@ -26,9 +27,22 @@ const createProject = async (req, res) => {
   return res.status(201).json({
     data: project,
   });
-};
+});
+
+const updateProjectStatus = asyncHandler(async (req, res) => {
+  const project = await projectService.updateProjectStatus({
+    projectId: req.params.id,
+    status: req.body.status,
+  });
+
+  res.json({
+    data: project,
+    message: "Project status updated",
+  });
+});
 
 module.exports = {
   createProject,
   getProjects,
+  updateProjectStatus,
 };
