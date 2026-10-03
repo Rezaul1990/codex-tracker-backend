@@ -33,6 +33,7 @@ router.post("/login", authRateLimiter, validateRequest(loginValidator), authCont
 router.post("/logout", authController.logout);
 router.post("/refresh", authRateLimiter, authController.refresh);
 router.get("/me", authenticate, authController.me);
+router.get("/users", authenticate, authorize("admin", "manager"), authController.users);
 router.post(
   "/verify-email",
   emailRateLimiter,

@@ -225,6 +225,13 @@ const getCurrentUser = async (userId) => {
   return user.toSafeObject();
 };
 
+const listUsers = async (requestUser) => {
+  const filter = requestUser.role === "manager" ? { role: "member" } : {};
+  const users = await User.find(filter).sort({ name: 1, email: 1 });
+
+  return users.map((user) => user.toSafeObject());
+};
+
 const verifyEmail = async (token) => {
   const verificationToken = await VerificationToken.findOne({ tokenHash: hashToken(token) }).populate(
     "user",
@@ -317,6 +324,7 @@ module.exports = {
   forgotPassword,
   getCurrentUser,
   inviteUser,
+  listUsers,
   login,
   logout,
   refreshAuth,

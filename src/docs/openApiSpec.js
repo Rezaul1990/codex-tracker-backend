@@ -74,8 +74,16 @@ const openApiSpec = {
         type: "object",
         properties: {
           _id: { type: "string" },
+          archivedAt: { type: "string", nullable: true, format: "date-time" },
+          createdBy: { $ref: "#/components/schemas/AuthUser" },
+          dueDate: { type: "string", nullable: true, format: "date-time" },
           projectName: { type: "string", example: "Website redesign" },
           description: { type: "string", example: "Update landing page and tracker UI" },
+          members: {
+            type: "array",
+            items: { $ref: "#/components/schemas/AuthUser" },
+          },
+          startDate: { type: "string", nullable: true, format: "date-time" },
           status: {
             type: "string",
             enum: ["pending", "in-progress", "completed"],
@@ -83,6 +91,60 @@ const openApiSpec = {
           },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      Task: {
+        type: "object",
+        properties: {
+          _id: { type: "string" },
+          archivedAt: { type: "string", nullable: true, format: "date-time" },
+          assignee: { $ref: "#/components/schemas/AuthUser" },
+          createdBy: { $ref: "#/components/schemas/AuthUser" },
+          description: { type: "string", example: "Prepare dashboard UI" },
+          dueDate: { type: "string", nullable: true, format: "date-time" },
+          priority: { type: "string", enum: ["low", "medium", "high"], example: "medium" },
+          project: { $ref: "#/components/schemas/Project" },
+          startDate: { type: "string", nullable: true, format: "date-time" },
+          status: { type: "string", enum: ["todo", "in-progress", "completed"], example: "todo" },
+          title: { type: "string", example: "Prepare dashboard UI" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      Comment: {
+        type: "object",
+        properties: {
+          _id: { type: "string" },
+          author: { $ref: "#/components/schemas/AuthUser" },
+          message: { type: "string", example: "Looks good." },
+          task: { type: "string" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      Attachment: {
+        type: "object",
+        properties: {
+          _id: { type: "string" },
+          entityType: { type: "string", enum: ["project", "task"] },
+          entityId: { type: "string" },
+          fileName: { type: "string" },
+          mimeType: { type: "string" },
+          size: { type: "number" },
+          uploadedBy: { $ref: "#/components/schemas/AuthUser" },
+          url: { type: "string" },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      Activity: {
+        type: "object",
+        properties: {
+          _id: { type: "string" },
+          actor: { $ref: "#/components/schemas/AuthUser" },
+          action: { type: "string", example: "task_created" },
+          metadata: { type: "object" },
+          task: { $ref: "#/components/schemas/Task" },
+          createdAt: { type: "string", format: "date-time" },
         },
       },
       Error: {
@@ -164,6 +226,34 @@ const openApiSpec = {
             },
           },
           401: { description: "Authentication required" },
+        },
+      },
+    },
+    "/api/auth/users": {
+      get: {
+        tags: ["Auth"],
+        summary: "List users for member selection",
+        description:
+          "Admin can list all users. Manager can list members. Password hashes and other sensitive fields are never returned.",
+        security: [{ cookieAuth: [] }],
+        responses: {
+          200: {
+            description: "Safe user list",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    data: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/AuthUser" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          403: { description: "Forbidden" },
         },
       },
     },
@@ -283,8 +373,18 @@ const openApiSpec = {
     "/api/projects": {
       get: {
         tags: ["Projects"],
-        summary: "List projects",
+        summary: "List accessible active projects",
+        description:
+          "Returns only projects the authenticated user can access. Archived projects are hidden unless archived=true is passed.",
         security: [{ cookieAuth: [] }],
+        parameters: [
+          {
+            name: "archived",
+            in: "query",
+            required: false,
+            schema: { type: "boolean" },
+          },
+        ],
         responses: {
           200: {
             description: "Project list",
@@ -318,6 +418,8 @@ const openApiSpec = {
                 properties: {
                   projectName: { type: "string", example: "Website redesign" },
                   description: { type: "string", example: "Update tracker dashboard" },
+                  startDate: { type: "string", format: "date", example: "2026-10-05" },
+                  dueDate: { type: "string", format: "date", example: "2026-10-30" },
                   status: {
                     type: "string",
                     enum: ["pending", "in-progress", "completed"],
@@ -342,6 +444,67 @@ const openApiSpec = {
               },
             },
           },
+        },
+      },
+    },
+    "/api/projects/{id}": {
+      get: {
+        tags: ["Projects"],
+        summary: "Get project details",
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          200: {
+            description: "Project details",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    data: { $ref: "#/components/schemas/Project" },
+                  },
+                },
+              },
+            },
+          },
+          403: { description: "Forbidden" },
+          404: { description: "Project not found" },
+        },
+      },
+      patch: {
+        tags: ["Projects"],
+        summary: "Update project",
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  projectName: { type: "string", example: "Website redesign" },
+                  description: { type: "string", example: "Update tracker dashboard" },
+                  startDate: { type: "string", format: "date", example: "2026-10-05" },
+                  dueDate: { type: "string", format: "date", example: "2026-10-30" },
+                  status: {
+                    type: "string",
+                    enum: ["pending", "in-progress", "completed"],
+                    example: "in-progress",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: "Project updated" },
+          403: { description: "Forbidden" },
+          404: { description: "Project not found" },
         },
       },
     },
@@ -393,6 +556,291 @@ const openApiSpec = {
           },
           400: { description: "Invalid project id or status" },
           404: { description: "Project not found" },
+        },
+      },
+    },
+    "/api/projects/{id}/members": {
+      post: {
+        tags: ["Projects"],
+        summary: "Add project member",
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  email: { type: "string", example: "member@example.com" },
+                  userId: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: "Project member added" },
+          403: { description: "Forbidden" },
+          404: { description: "User or project not found" },
+          409: { description: "Duplicate member" },
+        },
+      },
+    },
+    "/api/projects/{id}/members/{userId}": {
+      delete: {
+        tags: ["Projects"],
+        summary: "Remove project member",
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          { name: "userId", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          200: { description: "Project member removed" },
+          400: { description: "Creator cannot be removed" },
+          403: { description: "Forbidden" },
+          404: { description: "Project member not found" },
+        },
+      },
+    },
+    "/api/projects/{id}/archive": {
+      patch: {
+        tags: ["Projects"],
+        summary: "Archive or restore project",
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        requestBody: {
+          required: false,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  archived: { type: "boolean", example: true },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: "Project archive state updated" },
+          403: { description: "Forbidden" },
+          404: { description: "Project not found" },
+        },
+      },
+    },
+    "/api/projects/{projectId}/tasks": {
+      get: {
+        tags: ["Projects"],
+        summary: "List project tasks",
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: "projectId", in: "path", required: true, schema: { type: "string" } },
+          { name: "archived", in: "query", required: false, schema: { type: "boolean" } },
+        ],
+        responses: {
+          200: {
+            description: "Task list",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    data: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/Task" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          403: { description: "Forbidden" },
+        },
+      },
+      post: {
+        tags: ["Projects"],
+        summary: "Create project task",
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: "projectId", in: "path", required: true, schema: { type: "string" } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["title"],
+                properties: {
+                  title: { type: "string", example: "Prepare dashboard UI" },
+                  description: { type: "string" },
+                  status: { type: "string", enum: ["todo", "in-progress", "completed"] },
+                  priority: { type: "string", enum: ["low", "medium", "high"] },
+                  assignee: { type: "string", description: "Project member user id" },
+                  startDate: { type: "string", format: "date" },
+                  dueDate: { type: "string", format: "date" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: "Task created" },
+          400: { description: "Invalid task payload or assignee" },
+          403: { description: "Forbidden" },
+        },
+      },
+    },
+    "/api/projects/{projectId}/attachments": {
+      get: {
+        tags: ["Projects"],
+        summary: "List project attachments",
+        security: [{ cookieAuth: [] }],
+        responses: { 200: { description: "Project attachment list" } },
+      },
+      post: {
+        tags: ["Projects"],
+        summary: "Upload project attachment",
+        description: "Multipart upload with a file field named file.",
+        security: [{ cookieAuth: [] }],
+        responses: { 201: { description: "Attachment uploaded" } },
+      },
+    },
+    "/api/projects/{projectId}/activities": {
+      get: {
+        tags: ["Projects"],
+        summary: "List project activity",
+        security: [{ cookieAuth: [] }],
+        responses: { 200: { description: "Project activity list" } },
+      },
+    },
+    "/api/tasks/{id}": {
+      get: {
+        tags: ["Projects"],
+        summary: "Get task details",
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          200: { description: "Task details" },
+          403: { description: "Forbidden" },
+          404: { description: "Task not found" },
+        },
+      },
+      patch: {
+        tags: ["Projects"],
+        summary: "Update task",
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          200: { description: "Task updated" },
+          400: { description: "Invalid task payload" },
+          403: { description: "Forbidden" },
+        },
+      },
+    },
+    "/api/tasks/{taskId}/comments": {
+      get: {
+        tags: ["Projects"],
+        summary: "List task comments",
+        security: [{ cookieAuth: [] }],
+        responses: { 200: { description: "Task comments" } },
+      },
+      post: {
+        tags: ["Projects"],
+        summary: "Add task comment",
+        security: [{ cookieAuth: [] }],
+        responses: { 201: { description: "Comment added" } },
+      },
+    },
+    "/api/tasks/{taskId}/attachments": {
+      get: {
+        tags: ["Projects"],
+        summary: "List task attachments",
+        security: [{ cookieAuth: [] }],
+        responses: { 200: { description: "Task attachment list" } },
+      },
+      post: {
+        tags: ["Projects"],
+        summary: "Upload task attachment",
+        description: "Multipart upload with a file field named file.",
+        security: [{ cookieAuth: [] }],
+        responses: { 201: { description: "Attachment uploaded" } },
+      },
+    },
+    "/api/attachments/{id}": {
+      delete: {
+        tags: ["Projects"],
+        summary: "Remove attachment",
+        security: [{ cookieAuth: [] }],
+        responses: { 200: { description: "Attachment removed" } },
+      },
+    },
+    "/api/tasks/{id}/status": {
+      patch: {
+        tags: ["Projects"],
+        summary: "Update task status",
+        description:
+          "Admin/Manager can update managed project tasks. Assigned members can update their own task status.",
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["status"],
+                properties: {
+                  status: { type: "string", enum: ["todo", "in-progress", "completed"] },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: "Task status updated" },
+          403: { description: "Forbidden" },
+        },
+      },
+    },
+    "/api/tasks/{id}/assignee": {
+      patch: {
+        tags: ["Projects"],
+        summary: "Update task assignee",
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          200: { description: "Task assignee updated" },
+          400: { description: "Assignee must be a project member" },
+          403: { description: "Forbidden" },
+        },
+      },
+    },
+    "/api/tasks/{id}/archive": {
+      patch: {
+        tags: ["Projects"],
+        summary: "Archive or restore task",
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          200: { description: "Task archive state updated" },
+          403: { description: "Forbidden" },
         },
       },
     },

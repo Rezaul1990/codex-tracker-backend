@@ -67,6 +67,14 @@ const me = asyncHandler(async (req, res) => {
   });
 });
 
+const users = asyncHandler(async (req, res) => {
+  const safeUsers = await authService.listUsers(req.user);
+
+  res.json({
+    data: safeUsers,
+  });
+});
+
 const verifyEmail = asyncHandler(async (req, res) => {
   const user = await authService.verifyEmail(req.validatedBody.token);
 
@@ -112,4 +120,5 @@ module.exports = {
   resendVerification,
   resetPassword,
   verifyEmail,
+  users,
 };
