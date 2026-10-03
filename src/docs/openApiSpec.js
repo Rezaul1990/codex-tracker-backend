@@ -21,6 +21,8 @@ const openApiSpec = {
   tags: [
     { name: "Health" },
     { name: "Auth" },
+    { name: "Dashboard" },
+    { name: "Notifications" },
     { name: "Projects" },
   ],
   components: {
@@ -145,6 +147,46 @@ const openApiSpec = {
           metadata: { type: "object" },
           task: { $ref: "#/components/schemas/Task" },
           createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      DashboardSummary: {
+        type: "object",
+        properties: {
+          totalAccessibleProjects: { type: "number" },
+          activeProjects: { type: "number" },
+          completedProjects: { type: "number" },
+          totalRelevantTasks: { type: "number" },
+          todoTasks: { type: "number" },
+          inProgressTasks: { type: "number" },
+          completedTasks: { type: "number" },
+          overdueTasks: { type: "number" },
+          assignedToMeTasks: { type: "number" },
+          upcomingDueTasks: { type: "number" },
+        },
+      },
+      Notification: {
+        type: "object",
+        properties: {
+          _id: { type: "string" },
+          actor: { $ref: "#/components/schemas/AuthUser" },
+          type: {
+            type: "string",
+            enum: [
+              "project_member_added",
+              "task_assigned",
+              "task_reassigned",
+              "task_status_changed",
+              "comment_added",
+            ],
+          },
+          title: { type: "string" },
+          message: { type: "string" },
+          project: { $ref: "#/components/schemas/Project" },
+          task: { $ref: "#/components/schemas/Task" },
+          isRead: { type: "boolean" },
+          readAt: { type: "string", nullable: true, format: "date-time" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
         },
       },
       Error: {
@@ -367,6 +409,84 @@ const openApiSpec = {
             },
           },
           400: { description: "Invalid or expired token" },
+        },
+      },
+    },
+    "/api/dashboard/summary": {
+      get: {
+        tags: ["Dashboard"],
+        summary: "Get permission-aware dashboard metrics",
+        description:
+          "Counts only projects and tasks the authenticated user can access. Archived records are excluded from active metrics.",
+        security: [{ cookieAuth: [] }],
+        responses: {
+          200: {
+            description: "Dashboard summary",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    data: { $ref: "#/components/schemas/DashboardSummary" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/notifications": {
+      get: {
+        tags: ["Notifications"],
+        summary: "List current user's notifications",
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: "limit", in: "query", required: false, schema: { type: "number" } },
+          { name: "unread", in: "query", required: false, schema: { type: "boolean" } },
+        ],
+        responses: {
+          200: {
+            description: "Notification list",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    data: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/Notification" },
+                    },
+                    unreadCount: { type: "number" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/notifications/{id}/read": {
+      patch: {
+        tags: ["Notifications"],
+        summary: "Mark one notification read",
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          200: { description: "Notification marked read" },
+          404: { description: "Notification not found for current user" },
+        },
+      },
+    },
+    "/api/notifications/read-all": {
+      patch: {
+        tags: ["Notifications"],
+        summary: "Mark all current-user notifications read",
+        security: [{ cookieAuth: [] }],
+        responses: {
+          200: { description: "Notifications marked read" },
         },
       },
     },
@@ -642,6 +762,15 @@ const openApiSpec = {
         parameters: [
           { name: "projectId", in: "path", required: true, schema: { type: "string" } },
           { name: "archived", in: "query", required: false, schema: { type: "boolean" } },
+          { name: "search", in: "query", required: false, schema: { type: "string" } },
+          { name: "status", in: "query", required: false, schema: { type: "string" } },
+          { name: "priority", in: "query", required: false, schema: { type: "string" } },
+          { name: "assignee", in: "query", required: false, schema: { type: "string" } },
+          { name: "dueFrom", in: "query", required: false, schema: { type: "string", format: "date" } },
+          { name: "dueTo", in: "query", required: false, schema: { type: "string", format: "date" } },
+          { name: "sort", in: "query", required: false, schema: { type: "string", example: "createdAt:desc" } },
+          { name: "page", in: "query", required: false, schema: { type: "number" } },
+          { name: "limit", in: "query", required: false, schema: { type: "number" } },
         ],
         responses: {
           200: {
@@ -707,9 +836,14 @@ const openApiSpec = {
       post: {
         tags: ["Projects"],
         summary: "Upload project attachment",
-        description: "Multipart upload with a file field named file.",
+        description:
+          "Multipart upload with a file field named file. Files must be 5MB or less and use PDF, GIF, JPEG, PNG, or plain text MIME types.",
         security: [{ cookieAuth: [] }],
-        responses: { 201: { description: "Attachment uploaded" } },
+        responses: {
+          201: { description: "Attachment uploaded" },
+          400: { description: "Invalid file, file type, or file size" },
+          403: { description: "Forbidden" },
+        },
       },
     },
     "/api/projects/{projectId}/activities": {
@@ -717,6 +851,9 @@ const openApiSpec = {
         tags: ["Projects"],
         summary: "List project activity",
         security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: "limit", in: "query", required: false, schema: { type: "number" } },
+        ],
         responses: { 200: { description: "Project activity list" } },
       },
     },
@@ -772,9 +909,14 @@ const openApiSpec = {
       post: {
         tags: ["Projects"],
         summary: "Upload task attachment",
-        description: "Multipart upload with a file field named file.",
+        description:
+          "Multipart upload with a file field named file. Files must be 5MB or less and use PDF, GIF, JPEG, PNG, or plain text MIME types.",
         security: [{ cookieAuth: [] }],
-        responses: { 201: { description: "Attachment uploaded" } },
+        responses: {
+          201: { description: "Attachment uploaded" },
+          400: { description: "Invalid file, file type, or file size" },
+          403: { description: "Forbidden" },
+        },
       },
     },
     "/api/attachments/{id}": {

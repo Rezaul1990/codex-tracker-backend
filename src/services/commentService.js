@@ -4,6 +4,7 @@ const ApiError = require("../utils/apiError");
 const { isProjectMember } = require("./projectService");
 const { getTaskById } = require("./taskService");
 const { recordActivity } = require("./activityService");
+const { createNotifications } = require("./notificationService");
 
 const toObjectIdString = (value) => {
   if (!value) {
@@ -69,6 +70,16 @@ const createTaskComment = async ({ mentions = [], message, taskId, user }) => {
     metadata: { taskTitle: task.title },
     project: getProjectIdFromTask(task),
     task: taskId,
+  });
+
+  await createNotifications({
+    actor: user.id,
+    message: `${user.name} commented on "${task.title}".`,
+    project: getProjectIdFromTask(task),
+    recipients: [...mentionIds, task.assignee],
+    task: taskId,
+    title: "New task comment",
+    type: "comment_added",
   });
 
   return Comment.findById(comment._id)

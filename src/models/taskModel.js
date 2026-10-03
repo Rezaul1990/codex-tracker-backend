@@ -62,7 +62,11 @@ const taskSchema = new mongoose.Schema(
 
 taskSchema.index({ archivedAt: 1 });
 taskSchema.index({ assignee: 1 });
+taskSchema.index({ project: 1, assignee: 1 });
+taskSchema.index({ project: 1, dueDate: 1 });
 taskSchema.index({ project: 1, archivedAt: 1 });
+taskSchema.index({ project: 1, priority: 1 });
+taskSchema.index({ project: 1, status: 1 });
 
 module.exports = {
   TASK_PRIORITIES,

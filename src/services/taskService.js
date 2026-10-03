@@ -9,6 +9,7 @@ const {
   isProjectMember,
 } = require("./projectService");
 const { recordActivity } = require("./activityService");
+const { createNotifications } = require("./notificationService");
 
 const taskPopulate = [
   { path: "assignee", select: "name email role" },
@@ -56,6 +57,99 @@ const validatePriority = (priority) => {
   if (!TASK_PRIORITIES.includes(priority)) {
     throw new ApiError(400, "A valid task priority is required", "VALIDATION_ERROR");
   }
+};
+
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const parsePagination = ({ limit, page }) => {
+  const parsedLimit = limit === undefined ? 50 : Number(limit);
+  const parsedPage = page === undefined ? 1 : Number(page);
+
+  if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+    throw new ApiError(400, "limit must be between 1 and 100", "VALIDATION_ERROR");
+  }
+
+  if (!Number.isInteger(parsedPage) || parsedPage < 1) {
+    throw new ApiError(400, "page must be a positive number", "VALIDATION_ERROR");
+  }
+
+  return {
+    limit: parsedLimit,
+    page: parsedPage,
+    skip: (parsedPage - 1) * parsedLimit,
+  };
+};
+
+const applyTaskQueryFilters = ({ filter, project, query = {} }) => {
+  const archived = query.archived || "false";
+
+  if (archived === "only") {
+    filter.archivedAt = { $ne: null };
+  } else if (archived !== "true") {
+    filter.archivedAt = null;
+  }
+
+  if (query.search) {
+    const text = String(query.search).trim();
+
+    if (text.length > 80) {
+      throw new ApiError(400, "search must be 80 characters or less", "VALIDATION_ERROR");
+    }
+
+    if (text) {
+      const regex = new RegExp(escapeRegex(text), "i");
+      filter.$or = [{ title: regex }, { description: regex }];
+    }
+  }
+
+  if (query.status) {
+    validateStatus(query.status);
+    filter.status = query.status;
+  }
+
+  if (query.priority) {
+    validatePriority(query.priority);
+    filter.priority = query.priority;
+  }
+
+  if (query.assignee) {
+    if (query.assignee === "unassigned") {
+      filter.assignee = null;
+    } else {
+      validateObjectId(query.assignee, "assignee id");
+
+      if (!isProjectMember(project, query.assignee)) {
+        throw new ApiError(400, "Assignee must be a project member", "VALIDATION_ERROR");
+      }
+
+      filter.assignee = query.assignee;
+    }
+  }
+
+  const dueDate = {};
+
+  if (query.dueFrom) {
+    dueDate.$gte = parseOptionalDate(query.dueFrom, "dueFrom");
+  }
+
+  if (query.dueTo) {
+    dueDate.$lte = parseOptionalDate(query.dueTo, "dueTo");
+  }
+
+  if (Object.keys(dueDate).length) {
+    filter.dueDate = dueDate;
+  }
+};
+
+const getSortOption = (sort = "createdAt:desc") => {
+  const allowedFields = new Set(["createdAt", "dueDate", "priority", "status", "title", "updatedAt"]);
+  const [field, direction = "asc"] = String(sort).split(":");
+
+  if (!allowedFields.has(field) || !["asc", "desc"].includes(direction)) {
+    throw new ApiError(400, "sort must use an allowed field and direction", "VALIDATION_ERROR");
+  }
+
+  return { [field]: direction === "desc" ? -1 : 1 };
 };
 
 const ensureCanManageProjectTasks = (user, project) => {
@@ -112,18 +206,39 @@ const getProjectForTaskAccess = async ({ projectId, user }) =>
     user,
   });
 
-const getTasksForProject = async ({ includeArchived = false, projectId, user }) => {
-  await getProjectForTaskAccess({ projectId, user });
+const getTasksForProject = async ({ includeArchived = false, projectId, query = {}, user }) => {
+  const project = await getProjectForTaskAccess({ projectId, user });
 
   const filter = {
     project: projectId,
   };
 
-  if (!includeArchived) {
+  if (includeArchived && query.archived === undefined) {
+    query.archived = "true";
+  }
+
+  applyTaskQueryFilters({ filter, project, query });
+
+  if (!includeArchived && query.archived === undefined) {
     filter.archivedAt = null;
   }
 
-  return Task.find(filter).populate(taskPopulate).sort({ createdAt: -1 });
+  const pagination = parsePagination(query);
+  const sort = getSortOption(query.sort);
+  const [data, total] = await Promise.all([
+    Task.find(filter).populate(taskPopulate).sort(sort).skip(pagination.skip).limit(pagination.limit),
+    Task.countDocuments(filter),
+  ]);
+
+  return {
+    data,
+    meta: {
+      limit: pagination.limit,
+      page: pagination.page,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / pagination.limit)),
+    },
+  };
 };
 
 const createTask = async ({ input, projectId, user }) => {
@@ -166,6 +281,18 @@ const createTask = async ({ input, projectId, user }) => {
     task: task._id,
   });
 
+  if (assignee) {
+    await createNotifications({
+      actor: user.id,
+      message: `You were assigned to "${task.title}" in ${project.projectName}.`,
+      project: project._id,
+      recipients: [assignee],
+      task: task._id,
+      title: "Task assigned",
+      type: "task_assigned",
+    });
+  }
+
   return Task.findById(task._id).populate(taskPopulate);
 };
 
@@ -204,6 +331,24 @@ const updateTask = async ({ input, taskId, user }) => {
         project: project._id,
         task: task._id,
       });
+
+      if (["in-progress", "completed"].includes(input.status)) {
+        const notifyRecipients = [
+          task.assignee,
+          project.createdBy,
+          ...(project.members || []),
+        ];
+
+        await createNotifications({
+          actor: user.id,
+          message: `"${task.title}" moved from ${task.status} to ${input.status}.`,
+          project: project._id,
+          recipients: notifyRecipients,
+          task: task._id,
+          title: "Task status changed",
+          type: "task_status_changed",
+        });
+      }
     }
     task.status = input.status;
   }
@@ -238,6 +383,20 @@ const updateTask = async ({ input, taskId, user }) => {
         project: project._id,
         task: task._id,
       });
+
+      if (nextAssignee) {
+        await createNotifications({
+          actor: user.id,
+          message: previousAssignee
+            ? `You were reassigned to "${task.title}" in ${project.projectName}.`
+            : `You were assigned to "${task.title}" in ${project.projectName}.`,
+          project: project._id,
+          recipients: [nextAssignee],
+          task: task._id,
+          title: previousAssignee ? "Task reassigned" : "Task assigned",
+          type: previousAssignee ? "task_reassigned" : "task_assigned",
+        });
+      }
     }
   }
 
@@ -270,6 +429,18 @@ const updateTaskStatus = async ({ status, taskId, user }) => {
       project: project._id,
       task: task._id,
     });
+
+    if (["in-progress", "completed"].includes(status)) {
+      await createNotifications({
+        actor: user.id,
+        message: `"${task.title}" moved from ${task.status} to ${status}.`,
+        project: project._id,
+        recipients: [task.assignee, project.createdBy, ...(project.members || [])],
+        task: task._id,
+        title: "Task status changed",
+        type: "task_status_changed",
+      });
+    }
   }
 
   task.status = status;
@@ -307,6 +478,10 @@ const archiveTask = async ({ archived, taskId, user }) => {
 };
 
 module.exports = {
+  __test: {
+    getSortOption,
+    parsePagination,
+  },
   TASK_PRIORITIES,
   TASK_STATUSES,
   archiveTask,

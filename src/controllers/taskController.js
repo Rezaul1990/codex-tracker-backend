@@ -5,11 +5,13 @@ const getProjectTasks = asyncHandler(async (req, res) => {
   const tasks = await taskService.getTasksForProject({
     includeArchived: req.query.archived === "true",
     projectId: req.params.projectId,
+    query: { ...req.query },
     user: req.user,
   });
 
   res.json({
-    data: tasks,
+    data: tasks.data,
+    meta: tasks.meta,
   });
 });
 

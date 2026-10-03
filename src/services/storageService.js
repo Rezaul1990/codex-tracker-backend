@@ -3,7 +3,16 @@ const path = require("path");
 
 const multer = require("multer");
 
+const ApiError = require("../utils/apiError");
+
 const uploadRoot = path.resolve(__dirname, "../../uploads");
+const allowedMimeTypes = new Set([
+  "application/pdf",
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "text/plain",
+]);
 
 fs.mkdirSync(uploadRoot, { recursive: true });
 
@@ -24,6 +33,14 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({
+  fileFilter: (req, file, callback) => {
+    if (!allowedMimeTypes.has(file.mimetype)) {
+      callback(new ApiError(400, "File type is not allowed", "VALIDATION_ERROR"));
+      return;
+    }
+
+    callback(null, true);
+  },
   limits: {
     fileSize: 5 * 1024 * 1024,
   },
@@ -45,6 +62,7 @@ const removeStoredFile = async (storageKey) => {
 };
 
 module.exports = {
+  allowedMimeTypes,
   removeStoredFile,
   upload,
 };

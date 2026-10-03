@@ -1,4 +1,5 @@
 const Activity = require("../models/activityModel");
+const ApiError = require("../utils/apiError");
 const { getProjectById } = require("./projectService");
 
 const recordActivity = async ({ action, actor, metadata = {}, project, task = null }) => {
@@ -18,7 +19,11 @@ const recordActivity = async ({ action, actor, metadata = {}, project, task = nu
 const listProjectActivities = async ({ limit = 50, projectId, user }) => {
   await getProjectById({ projectId, user });
 
-  const safeLimit = Math.min(Number(limit) || 50, 100);
+  const safeLimit = limit === undefined ? 50 : Number(limit);
+
+  if (!Number.isInteger(safeLimit) || safeLimit < 1 || safeLimit > 100) {
+    throw new ApiError(400, "limit must be between 1 and 100", "VALIDATION_ERROR");
+  }
 
   return Activity.find({ project: projectId })
     .populate("actor", "name email role")
@@ -28,6 +33,17 @@ const listProjectActivities = async ({ limit = 50, projectId, user }) => {
 };
 
 module.exports = {
+  __test: {
+    parseLimit: (limit) => {
+      const safeLimit = limit === undefined ? 50 : Number(limit);
+
+      if (!Number.isInteger(safeLimit) || safeLimit < 1 || safeLimit > 100) {
+        throw new ApiError(400, "limit must be between 1 and 100", "VALIDATION_ERROR");
+      }
+
+      return safeLimit;
+    },
+  },
   listProjectActivities,
   recordActivity,
 };

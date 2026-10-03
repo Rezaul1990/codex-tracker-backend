@@ -3,15 +3,7 @@ const ApiError = require("../utils/apiError");
 const { canManageProject, getProjectById } = require("./projectService");
 const { getTaskById } = require("./taskService");
 const { recordActivity } = require("./activityService");
-const { removeStoredFile } = require("./storageService");
-
-const allowedMimeTypes = new Set([
-  "application/pdf",
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "text/plain",
-]);
+const { allowedMimeTypes, removeStoredFile } = require("./storageService");
 
 const toObjectIdString = (value) => {
   if (!value) {
@@ -89,6 +81,10 @@ const uploadAttachment = async ({ entityId, entityType, file, user }) => {
 };
 
 const removeAttachment = async ({ attachmentId, user }) => {
+  if (!require("mongoose").Types.ObjectId.isValid(attachmentId)) {
+    throw new ApiError(400, "A valid attachment id is required", "VALIDATION_ERROR");
+  }
+
   const attachment = await Attachment.findById(attachmentId).populate("uploadedBy", "name email role");
 
   if (!attachment) {

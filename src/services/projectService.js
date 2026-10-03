@@ -273,6 +273,15 @@ const addProjectMember = async ({ email, projectId, user, userId }) => {
     project: project._id,
   });
 
+  await require("./notificationService").createNotifications({
+    actor: user.id,
+    message: `You were added to ${project.projectName}.`,
+    project: project._id,
+    recipients: [targetUser._id],
+    title: "Added to project",
+    type: "project_member_added",
+  });
+
   return Project.findById(project._id).populate(memberPopulate);
 };
 
@@ -328,6 +337,7 @@ module.exports = {
   canAccessProject,
   canManageProject,
   createProject,
+  getAccessFilter,
   getAllProjects,
   getProjectById,
   isProjectMember,

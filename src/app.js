@@ -12,6 +12,8 @@ const { ensureDatabaseConnection } = require("./middleware/databaseMiddleware");
 const { errorHandler, notFoundHandler } = require("./middleware/errorMiddleware");
 const authRoutes = require("./routes/authRoutes");
 const attachmentRoutes = require("./routes/attachmentRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
 const projectRoutes = require("./routes/projectRoutes");
 const taskRoutes = require("./routes/taskRoutes");
 const { validateAuthEnv } = require("./config/env");
@@ -41,7 +43,16 @@ app.use(
 app.get("/", (req, res) => {
   res.json({
     message: "Codex Tracker System API is running",
-    endpoints: ["/health", "/api-docs", "/api-docs.json", "/api/auth", "/api/projects", "/api/tasks"],
+    endpoints: [
+      "/health",
+      "/api-docs",
+      "/api-docs.json",
+      "/api/auth",
+      "/api/dashboard",
+      "/api/notifications",
+      "/api/projects",
+      "/api/tasks",
+    ],
   });
 });
 
@@ -60,6 +71,8 @@ app.get("/health", (req, res) => {
 app.use("/api", ensureDatabaseConnection);
 app.use("/api/auth", authRoutes);
 app.use("/api/attachments", attachmentRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/notifications", notificationRoutes);
 app.use("/api/projects", projectRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use(notFoundHandler);
