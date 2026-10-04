@@ -2,7 +2,6 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const dotenv = require("dotenv");
 const express = require("express");
-const path = require("path");
 const swaggerUi = require("swagger-ui-express");
 
 dotenv.config();
@@ -18,6 +17,7 @@ const projectRoutes = require("./routes/projectRoutes");
 const taskRoutes = require("./routes/taskRoutes");
 const { validateAuthEnv } = require("./config/env");
 const openApiSpec = require("./docs/openApiSpec");
+const { uploadRoot } = require("./services/storageService");
 
 validateAuthEnv();
 
@@ -26,7 +26,7 @@ const app = express();
 app.use(cors(corsOptions));
 app.use(cookieParser());
 app.use(express.json());
-app.use("/uploads", express.static(path.resolve(__dirname, "../uploads")));
+app.use("/uploads", express.static(uploadRoot));
 app.use(
   "/api-docs",
   swaggerUi.serve,

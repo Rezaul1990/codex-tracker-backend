@@ -5,7 +5,7 @@ const multer = require("multer");
 
 const ApiError = require("../utils/apiError");
 
-const uploadRoot = path.resolve(__dirname, "../../uploads");
+const uploadRoot = path.join("/tmp", "uploads");
 const allowedMimeTypes = new Set([
   "application/pdf",
   "image/gif",
@@ -65,4 +65,5 @@ module.exports = {
   allowedMimeTypes,
   removeStoredFile,
   upload,
+  uploadRoot,
 };
